@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CSROCC Logo Preview</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #e8edf3;
+        color: #031b37;
+        font: 16px/1.5 Arial, sans-serif;
+      }
+      main { display: grid; gap: 24px; padding: 24px; }
+      section {
+        display: grid;
+        place-items: center;
+        min-height: 340px;
+        padding: 48px;
+        border-radius: 20px;
+      }
+      .dark {
+        background: radial-gradient(circle at 55% 30%, #0d3e70, #031b37 70%);
+      }
+      .light { background: #f8fafc; }
+      img { display: block; width: min(100%, 950px); height: auto; }
+      .compact img { width: min(100%, 650px); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="dark">
+        <img src="csrocc-lockup-on-dark.svg" alt="CSROCC logo on dark" />
+      </section>
+      <section class="light">
+        <img src="csrocc-lockup-on-light.svg" alt="CSROCC logo on light" />
+      </section>
+      <section class="dark compact">
+        <img src="csrocc-wordmark-on-dark.svg" alt="CSROCC wordmark on dark" />
+      </section>
+      <section class="light compact">
+        <img src="csrocc-wordmark-on-light.svg" alt="CSROCC wordmark on light" />
+      </section>
+    </main>
+  </body>
+</html>
