@@ -1,0 +1,335 @@
+**Title:** Build AI Alert Investigation Agent with Autonomous Investigation Workflow
+
+### Background
+
+The current Alert & Incident Investigation Portal provides AI analysis based mainly on the information already available for an alert.
+
+We want to evolve this capability into an **AI Investigation Agent** that can actively investigate an alert by deciding what evidence is required, selecting available tools/data sources, analysing the returned results, and determining the next investigation step.
+
+The goal is to move from:
+
+**Alert → Retrieve Context → LLM Analysis → Troubleshooting Guide**
+
+to:
+
+**Alert → Agent Investigation → Tool Calls → Evidence Collection → Reasoning → Conclusion / Escalation**
+
+---
+
+### Objective
+
+Build an MVP Alert Investigation Agent that can autonomously perform a **read-only investigation** across approved enterprise data sources.
+
+The Agent should not follow a completely hard-coded investigation sequence.
+
+Instead, based on the alert and evidence collected during the investigation, it should determine:
+
+- What information is required
+- Which available tool should be used
+- What the returned evidence means
+- Whether additional investigation is required
+- When sufficient evidence has been collected
+- When the investigation cannot progress and should be escalated
+
+---
+
+### High-Level Architecture
+
+```text
+Alert
+  ↓
+Investigation Agent
+  │
+  ├── LLM / Reasoning
+  ├── Instructions
+  ├── Investigation State
+  └── Available Tools
+          │
+          ├── Splunk Search
+          ├── ServiceNow Incident Search
+          ├── ServiceNow Change Search
+          └── Knowledge Base
+                  │
+                  ▼
+             Tool Result
+                  │
+                  ▼
+          Update Investigation
+               Context
+                  │
+                  ▼
+         Decide Next Action
+            /          \
+   More Evidence       Enough Evidence
+       Needed               │
+         │                  ▼
+         └──────→     Final Analysis
+```
+
+The core behaviour should follow an **Agent Loop**:
+
+```text
+Observe
+↓
+Reason
+↓
+Select Action / Tool
+↓
+Execute Tool
+↓
+Observe Result
+↓
+Update Investigation State
+↓
+Decide Next Action
+```
+
+---
+
+### MVP Tools
+
+Expose the following capabilities to the Agent as structured, read-only tools where technically available:
+
+**1. Splunk Search**
+
+Allow the Agent to run approved/read-only SPL searches to investigate alert behaviour, affected applications/entities, trends and related events.
+
+**2. ServiceNow Incident Search**
+
+Search historical incidents for similar symptoms, previous root causes and remediation actions.
+
+**3. ServiceNow Change Search**
+
+Identify recent changes that may correlate with the alert.
+
+**4. Knowledge Base Search**
+
+Retrieve relevant troubleshooting guides, known problems and historical investigation knowledge.
+
+The tool interface should be extensible so additional tools such as CMDB, Dynatrace or other observability/security platforms can be added later.
+
+---
+
+### Example Investigation
+
+Alert:
+
+**HashiVault Authentication Failure Rate > 20%**
+
+The Agent may decide to:
+
+1. Query Splunk to identify which applications generate the failures.
+2. Discover that the majority of failures originate from App-A.
+3. Decide to search recent ServiceNow changes for App-A.
+4. Discover a credential rotation change two hours before the alert.
+5. Search historical incidents for similar authentication failures.
+6. Find a previous incident where an application continued using an old secret following credential rotation.
+7. Determine that sufficient evidence exists and stop the investigation.
+
+Example output:
+
+**Probable Cause**
+
+App-A credential rotation may have caused the application to continue using an outdated secret.
+
+**Evidence**
+
+- Majority of authentication failures originate from App-A.
+- Credential rotation occurred shortly before the alert.
+- A historical incident shows the same failure pattern following credential rotation.
+
+**Recommended Next Action**
+
+Validate the secret version currently used by App-A and confirm whether the workload has refreshed the latest credential.
+
+**Confidence**
+
+Medium / High
+
+The Agent must clearly distinguish **observed evidence** from **AI inference**.
+
+---
+
+### Investigation State
+
+Maintain structured investigation state rather than relying only on conversation history.
+
+At minimum capture:
+
+- Alert ID
+- Investigation ID
+- Investigation goal
+- Investigation status
+- Steps performed
+- Tools called
+- Tool parameters
+- Evidence collected
+- Current hypothesis
+- Confidence / uncertainty
+- Final conclusion
+- Recommended actions
+- Stop reason
+
+Suggested investigation statuses:
+
+```text
+IN_PROGRESS
+COMPLETED
+ESCALATED
+BLOCKED
+LIMIT_REACHED
+FAILED
+```
+
+---
+
+### Stop Conditions
+
+The LLM can determine whether sufficient evidence has been collected, but it must **not have sole control over execution limits**.
+
+The orchestration layer must enforce deterministic controls such as:
+
+- Maximum investigation steps
+- Maximum tool calls
+- Investigation timeout
+- Allowed tools
+- Tool permissions
+- Failure/retry limits
+
+Example:
+
+```text
+Agent:
+"I need more evidence."
+
+Orchestrator:
+"Maximum investigation steps reached."
+
+Result:
+LIMIT_REACHED → Escalate to analyst
+```
+
+The Agent should also stop when:
+
+- Evidence is sufficient to provide a supported conclusion
+- Required information is unavailable
+- Required tool/access is unavailable
+- Evidence remains inconclusive after reaching investigation limits
+- Continuing would require an action outside the Agent's permission boundary
+
+---
+
+### Security / Guardrails
+
+For MVP, the Investigation Agent must be **read-only**.
+
+Allowed:
+
+- Run approved Splunk searches
+- Retrieve alert information
+- Search incidents
+- Search changes
+- Retrieve knowledge articles
+- Generate investigation findings and recommendations
+
+Not allowed:
+
+- Restart applications
+- Modify alert configuration
+- Suppress alerts
+- Modify ServiceNow records
+- Merge GitHub PRs
+- Change infrastructure/network/security configuration
+- Execute production changes
+
+Any future write capability must introduce explicit authorisation and human approval controls.
+
+---
+
+### Investigation Output
+
+The final result should be structured and explainable:
+
+**Summary**
+
+Short explanation of what the Agent believes is happening.
+
+**Evidence**
+
+Facts discovered from tools, including their source.
+
+**Hypothesis / Probable Cause**
+
+AI interpretation based on the collected evidence.
+
+**Confidence / Uncertainty**
+
+Indicate how strongly the available evidence supports the conclusion and clearly identify missing or conflicting evidence.
+
+**Recommended Actions**
+
+Suggested next investigation/remediation steps.
+
+**Investigation Trail**
+
+Display:
+
+```text
+Step 1 → Splunk Search
+Step 2 → ServiceNow Change Search
+Step 3 → Historical Incident Search
+...
+```
+
+Users should be able to understand **why the Agent reached its conclusion**.
+
+---
+
+### Acceptance Criteria
+
+The MVP is complete when:
+
+1. A user can trigger **Run Investigation** from an alert.
+2. The Agent receives the alert context and investigation goal.
+3. The Agent can autonomously select between at least two different investigation tools.
+4. Tool selection is based on evidence collected rather than a fully hard-coded sequence.
+5. Tool results are added to structured investigation state.
+6. The Agent can perform multiple investigation iterations.
+7. The Agent can determine when evidence is sufficient and complete the investigation.
+8. The orchestration layer independently enforces maximum steps/time/tool-call limits.
+9. The final output separates evidence, inference, confidence/uncertainty and recommended actions.
+10. The complete investigation trail and tool calls are auditable.
+11. MVP tools operate with read-only permissions.
+12. If evidence is insufficient, the Agent explicitly returns an escalation/inconclusive state rather than inventing a root cause.
+
+---
+
+### Out of Scope — MVP
+
+The following should **not** be implemented as part of this ticket:
+
+- Automatic remediation
+- Production changes
+- Alert suppression
+- Multi-Agent architecture
+- Self-healing
+- Autonomous ServiceNow updates
+- Knowledge Graph
+- Agent learning / automatic prompt modification
+
+These capabilities should only be considered after the read-only investigation Agent has been evaluated for accuracy, usefulness, security and operational reliability.
+
+---
+
+### Success Measure
+
+The MVP should demonstrate that the Agent can perform a more adaptive investigation than the current single-pass AI analysis while producing a traceable, evidence-based result.
+
+Initial evaluation should compare Agent findings with analyst investigation results and measure:
+
+- Investigation relevance
+- Evidence correctness
+- Root-cause/hypothesis usefulness
+- Unnecessary tool calls
+- Investigation completion time
+- Analyst acceptance of recommended next actions
